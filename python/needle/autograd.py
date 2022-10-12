@@ -407,13 +407,17 @@ class Tensor(Value):
     __rmatmul__ = __matmul__
 
 
-def compute_gradient_of_variables(output_tensor, out_grad):
+def _is_const_node(node: Value):
+    return not node.inputs and not node.op
+
+
+def compute_gradient_of_variables(output_tensor: Tensor, out_grad: Tensor):
     """Take gradient of output node with respect to each node in node_list.
 
     Store the computed result in the grad field of each Variable.
     """
     # a map from node to a list of gradient contributions from each output node
-    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = {}
+    node_to_output_grads_list: Dict[Tensor, List[Tensor]] = defaultdict(list)
     # Special note on initializing gradient of
     # We are really taking a derivative of the scalar reduce_sum(output_node)
     # instead of the vector output_node. But this is the common case for loss function.
@@ -422,9 +426,26 @@ def compute_gradient_of_variables(output_tensor, out_grad):
     # Traverse graph in reverse topological order given the output_node that we are taking gradient wrt.
     reverse_topo_order = list(reversed(find_topo_sort([output_tensor])))
 
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    for node in reverse_topo_order:
+
+        # adjoint := d loss / d node
+        grad = sum_node_list(node_to_output_grads_list[node])
+        node.grad = grad
+
+        if _is_const_node(node):
+            continue
+
+        # partial_adjoint := adjoint * d node / d input
+        output_grads = node.op.gradient_as_tuple(out_grad=grad, node=node)
+
+        for input_node, output_grad in zip(node.inputs, output_grads):
+            node_to_output_grads_list[input_node].append(output_grad)
+
+
+class DFSMark(int, Enum):
+    NOT_VISITED = 0
+    IN_PROGRESS = 1
+    VISITED = 2
 
 
 def find_topo_sort(node_list: List[Value]) -> List[Value]:
@@ -435,16 +456,30 @@ def find_topo_sort(node_list: List[Value]) -> List[Value]:
     after all its predecessors are traversed due to post-order DFS, we get a topological
     sort.
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    topo_order: List[Value] = []
+    visited: Dict[Value, DFSMark] = defaultdict(lambda: DFSMark.NOT_VISITED)
+    for node in node_list:
+        if visited[node] != DFSMark.VISITED:
+            topo_sort_dfs(node, visited, topo_order)
+
+    return topo_order
 
 
-def topo_sort_dfs(node, visited, topo_order):
+def topo_sort_dfs(node: Value, visited: Dict[Value, DFSMark], topo_order: List[Value]):
     """Post-order DFS"""
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    if visited[node] == DFSMark.VISITED:
+        return
+    if visited[node] == DFSMark.IN_PROGRESS:
+        raise ValueError("Nodes doesn't represent DAG")
+
+    visited[node] = DFSMark.IN_PROGRESS
+
+    for child in node.inputs:
+        topo_sort_dfs(child, visited, topo_order)
+
+    visited[node] = DFSMark.VISITED
+    topo_order.append(node)
+
 
 
 ##############################
