@@ -1,5 +1,6 @@
 """Operatpr table."""
 # Global operator table.
+from itertools import zip_longest
 from numbers import Number
 from typing import Optional, List
 from .autograd import NDArray

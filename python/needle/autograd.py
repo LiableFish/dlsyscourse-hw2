@@ -1,7 +1,8 @@
 """Core data structures."""
+from enum import Enum
 import needle
-from typing import List, Optional, NamedTuple, Tuple, Union
-from collections import namedtuple
+from typing import Dict, List, Optional, NamedTuple, Tuple, Union
+from collections import defaultdict, namedtuple
 import numpy
 from needle import init
 
