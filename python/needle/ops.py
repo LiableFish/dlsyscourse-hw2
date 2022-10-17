@@ -1,5 +1,6 @@
 """Operatpr table."""
 # Global operator table.
+from ipaddress import summarize_address_range
 from itertools import zip_longest
 from numbers import Number
 from typing import Optional, List
@@ -198,7 +199,7 @@ class Reshape(TensorOp):
         self.shape = shape
 
     def compute(self, a: NDArray):
-        return a.reshape(self.shape)
+        return array_api.reshape(a, self.shape)
 
     def gradient(self, out_grad: Tensor, node: Tensor):
         return out_grad.reshape(shape=node.inputs[0].shape)
@@ -230,7 +231,9 @@ class BroadcastTo(TensorOp):
             return out_grad
 
         broadcast_axes = []
-        for i, (input_dim, required_dim) in enumerate(zip_longest(input_shape, self.shape)):
+        for i, (input_dim, required_dim) in enumerate(
+            reversed(list(zip_longest(input_shape[::-1], self.shape[::-1])))
+        ):
             if self._is_broadcast(input_dim, required_dim):
                 broadcast_axes.append(i)
 
@@ -246,7 +249,7 @@ class Summation(TensorOp):
         self.axes = axes
 
     def compute(self, a: NDArray):
-        return array_api.sum(a, axis=self.axes)
+        return array_api.sum(a, self.axes)
 
     def gradient(self, out_grad: Tensor, node: Tensor):
         input_shape = node.inputs[0].shape
@@ -344,15 +347,34 @@ class LogSumExp(TensorOp):
     def __init__(self, axes: Optional[tuple] = None):
         self.axes = axes
 
-    def compute(self, Z):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+    def _get_keepdims_shape(self, input_shape: tuple):
+        axes = range(len(input_shape)) if self.axes is None else list(self.axes)
 
-    def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        # like when calling np.sum(..., keepdims=True)
+        keepdims_shape = np.array(input_shape)
+        keepdims_shape[axes] = 1
+
+        return keepdims_shape
+
+    def _get_keepdims_array(self, res: NDArray, input_: NDArray):
+        return array_api.reshape(res, self._get_keepdims_shape(input_.shape))
+
+    def _get_keepdims_tensor(self, res: Tensor, input_: Tensor):
+        return res.reshape(self._get_keepdims_shape(input_.shape))
+
+    def compute(self, Z: NDArray):
+        # return array_api.log(array_api.sum(array_api.exp(Z - array_api.max(Z, self.axes, keepdims=True)), self.axes)) + array_api.max(Z, self.axes)
+        max_Z = array_api.max(Z, self.axes)
+        broadcast_max_Z = array_api.broadcast_to(self._get_keepdims_array(max_Z, Z), Z.shape)
+
+        return array_api.log(array_api.sum(array_api.exp(Z - broadcast_max_Z), self.axes)) + max_Z
+
+    def gradient(self, out_grad: Tensor, node: Tensor):
+        input_node = node.inputs[0]
+        return (
+            self._get_keepdims_tensor(out_grad, input_node).broadcast_to(input_node.shape) *
+             exp(input_node - self._get_keepdims_tensor(node, input_node).broadcast_to(input_node.shape))
+        )
 
 
 def logsumexp(a, axes=None):
