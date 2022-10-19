@@ -177,15 +177,15 @@ class BatchNorm1d(Module):
             requires_grad=True,
         )
 
-        self.running_mean = Parameter(
-            init.zeros(dim),
+        self.running_mean = init.zeros(
+            dim,
             device=device,
             dtype=dtype,
             requires_grad=False,
         )
 
-        self.running_var = Parameter(
-            init.ones(dim),
+        self.running_var = init.ones(
+            dim,
             device=device,
             dtype=dtype,
             requires_grad=False,
@@ -197,12 +197,12 @@ class BatchNorm1d(Module):
         
         if self.training:
             mean = X.sum((0,)) / X.shape[0]
-            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean
+            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.data
 
             mean = mean.reshape((1, X.shape[1])).broadcast_to(X.shape)
 
             var = ((X - mean) ** 2).sum((0,)) / X.shape[0]
-            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var
+            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var.data
 
             var = var.reshape((1, X.shape[1])).broadcast_to(X.shape)
 
